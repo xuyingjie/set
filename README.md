@@ -1,4 +1,7 @@
 set
 ===
 
-note
+ckeditor.js
+bootstrap.css
+github.com/boltdb/bolt
+
