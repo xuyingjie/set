@@ -1,7 +1,8 @@
 set
 ===
 
-ckeditor.js  
-bootstrap.css  
-github.com/boltdb/bolt  
+Angular.js  
+Bootstrap.css  
+Aliyun OSS (github.com/yanunon/oss-go-api)  
+
 

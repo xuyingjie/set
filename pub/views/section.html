@@ -1,0 +1,11 @@
+<div ng-repeat="x in fragment">
+  <div class="container-fluid">
+    <h3>{{x.title}}</h3>
+    <div ng-bind-html="x.content | markdown | trustAsHtml"></div>
+    <div ng-if="auth">
+      <a class="label label-default" href ng-click="e(x.id)">编辑</a>
+    </div>
+  </div>
+
+  <hr>
+</div>

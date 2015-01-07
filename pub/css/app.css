@@ -1,0 +1,90 @@
+body {
+  font-family: 'Open Sans', FZLanTingHei\-R\-GBK, sans-serif;
+  background-color: #fdfdfd;
+  color: #222;
+}
+textarea {
+  font-family: 'Source Code Pro', 'DejaVu Sans Mono', Consolas, monospace;
+}
+img {
+  max-width: 100%;
+}
+blockquote {
+  font-size: 14px;
+}
+
+pre, code {
+  font-family: 'Source Code Pro', 'DejaVu Sans Mono', Consolas, monospace;
+  font-size: 14px;
+  border: 1px solid #e8e8e8;
+  border-radius: 3px;
+  background-color: #eef;
+  color: #111;
+}
+code {
+  padding: 1px 5px;
+}
+pre {
+  padding: 8px 12px;
+  overflow-x: scroll;
+}
+pre > code {
+  border: 0;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+
+/***  取消响应式导航  ***/
+.navbar-default {
+  background-color: #ffffff;
+  border-top: 5px solid #424242;
+  border-bottom: 1px solid #e8e8e8;
+  border-left: 0px;
+  border-right: 0px;
+  border-radius: 0px;
+}
+.navbar-header {
+  float: left;
+}
+.navbar-left {
+  float: left !important;
+}
+.navbar-right {
+  float: right !important;
+  margin-right: -15px;
+}
+.navbar-brand {
+  margin-left: -15px;
+}
+
+
+/***  定制form  ***/
+.form-control, .form-control:focus {
+  background-color: #fdfdfd;
+  color: #222;
+  border-width: 0 0 2px;
+  border-color: #BABABA;
+  border-radius: 0px;
+  box-shadow: none;
+  padding-left: 2px;
+}
+.mainput, .mainput:focus {
+  background-color: #ffffff;
+  color: #333;
+  width: 160px !important;
+  height: 22px;
+  padding: 0px;
+}
+.navbar-form {
+  margin: 0;
+  padding: 15px 0 13px;
+  border: 0;
+  box-shadow: none;
+}
+
+
+.dbmy {
+/*   color: #333 !important; */
+  font-weight: bold;
+}

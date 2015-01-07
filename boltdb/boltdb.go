@@ -1,4 +1,4 @@
-package main
+package boltdb
 
 import "github.com/boltdb/bolt"
 
