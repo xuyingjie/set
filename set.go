@@ -23,141 +23,51 @@ import (
 	"time"
 )
 
-type B struct {
+type blog struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
 	Id      string `json:"id"`
 }
-type T struct {
+type anchor struct {
 	Title string `json:"title"`
 	Id    string `json:"id"`
 }
-type S struct {
+type query struct {
 	Id      string `json:"id"`
 	Keyword string `json:"keyword"`
 }
 
 func main() {
 
+	var set []blog
+	var index []anchor
+
 	c := oss.NewClient()
+	cache(c, &set, &index)
 
 	//
-	//
-	//
-	//
-	listObject, err := c.GetBucket("dbmy", "t/", "", "", "")
-	if err != nil {
-		log.Fatalln(err)
-	}
-	var title []T
-	var set []B
-	//set := make(map[string]blog)
-	for _, v := range listObject.Contents {
-		bytes, err := c.GetObject("dbmy/"+v.Key, -1, -1)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		var b B
-		var t T
-		json.Unmarshal(bytes, &b)
-		//b.Id = "/dbmy/" + v.Key
-		b.Id = strings.TrimRight(strings.TrimLeft(v.Key, "t/"), ".json") // other
-		t.Title = b.Title
-		t.Id = b.Id
-		title = append(title, t)
-		set = append(set, b)
-		//set[v.Key] = b
-	}
-	//
-	//
-	//
-
-	//
-	//
-	//
-	http.HandleFunc("/list", func(w http.ResponseWriter, req *http.Request) {
-		b, err := json.Marshal(title)
-		if err != nil {
-			fmt.Println("json err:", err)
-		}
-		fmt.Println(string(b))
-		io.WriteString(w, string(b))
+	http.HandleFunc("/index", func(w http.ResponseWriter, req *http.Request) {
+		io.WriteString(w, jsonEncode(index))
 	})
 
 	http.HandleFunc("/get", func(w http.ResponseWriter, req *http.Request) {
+		var q query
+		jsonDecode(req.Body, &q)
+		s := querySet(&set, &q)
 
-		body, err := ioutil.ReadAll(req.Body)
-		if err != nil {
-			fmt.Println(err)
-		}
-		var search S
-		json.Unmarshal(body, &search)
-
-		var s []B
-		for _, v := range set {
-			if search.Id == v.Id {
-				s = append(s, v)
-			} else if search.Keyword != "" {
-				re := regexp.MustCompile(`(?i)` + search.Keyword)
-				if re.MatchString(v.Title) || re.MatchString(v.Content) {
-					s = append(s, v)
-				}
-			}
-		}
-
-		b, err := json.Marshal(s)
-		if err != nil {
-			fmt.Println("json err:", err)
-		}
-		io.WriteString(w, string(b))
+		io.WriteString(w, jsonEncode(s))
 	})
 
 	http.HandleFunc("/put", func(w http.ResponseWriter, req *http.Request) {
 		if req.Method == "POST" {
-			body, err := ioutil.ReadAll(req.Body)
-			if err != nil {
-				fmt.Println(err)
-			}
-			var b B
-			json.Unmarshal(body, &b)
-
+			var b blog
+			s := jsonDecode(req.Body, &b)
 			if b.Title != "" {
-				var id string
-				oldId := b.Id
-				if oldId != "" {
-					id = b.Id
-				} else {
-					id = timeDiff()
-				}
-				err = c.PutObjectFromString("/dbmy/t/"+id+".json", string(body))
-				if err != nil {
-					log.Fatalln(err)
-				}
-
-				var t T
-				b.Id = id
-				t.Title = b.Title
-				t.Id = b.Id
-				if oldId != "" {
-					for k, v := range title {
-						if b.Id == v.Id {
-							title[k] = t
-							set[k] = b
-						}
-					}
-				} else {
-					title = append(title, t)
-					set = append(set, b)
-				}
-
-				tjson, err := json.Marshal(t)
-				if err != nil {
-					fmt.Println("json err:", err)
-				}
-				io.WriteString(w, string(tjson))
+				id := putObject(c, b, s)
+				a := updateCache(b, id, &set, &index)
+				io.WriteString(w, jsonEncode(a))
 			}
 		}
-
 	})
 
 	//http.HandleFunc("/upload", upload)
@@ -218,4 +128,91 @@ func timeDiff() string {
 	diff := now.Sub(then).Nanoseconds()
 
 	return strconv.FormatInt(diff, 10)
+}
+
+func jsonDecode(reader io.Reader, v interface{}) string {
+	bytes, err := ioutil.ReadAll(reader)
+	if err != nil {
+		fmt.Println(err)
+	}
+	err = json.Unmarshal(bytes, v)
+	if err != nil {
+		fmt.Println("json err:", err)
+	}
+	return string(bytes)
+}
+
+func jsonEncode(v interface{}) string {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		fmt.Println("json err:", err)
+	}
+	return string(bytes)
+}
+
+// 缓存全部oss数据
+func cache(c *oss.Client, set *[]blog, index *[]anchor) {
+	objectList, err := c.GetBucket("dbmy", "t/", "", "", "")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	for _, v := range objectList.Contents {
+		bytes, err := c.GetObject("/dbmy/"+v.Key, -1, -1)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		var b blog
+		var a anchor
+		json.Unmarshal(bytes, &b)
+		b.Id = strings.TrimRight(strings.TrimLeft(v.Key, "t/"), ".json") // other
+		a.Title, a.Id = b.Title, b.Id
+		*index = append(*index, a)
+		*set = append(*set, b)
+	}
+}
+
+func putObject(c *oss.Client, b blog, s string) (id string) {
+	if b.Id != "" {
+		id = b.Id
+	} else {
+		id = timeDiff()
+	}
+
+	err := c.PutObjectFromString("/dbmy/t/"+id+".json", s)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return
+}
+
+func updateCache(b blog, id string, set *[]blog, index *[]anchor) (a anchor) {
+	if b.Id != "" {
+		a.Title, a.Id = b.Title, b.Id
+		for k, v := range *index {
+			if b.Id == v.Id {
+				(*index)[k] = a
+				(*set)[k] = b
+			}
+		}
+	} else {
+		b.Id = id
+		a.Title, a.Id = b.Title, b.Id
+		*index = append(*index, a)
+		*set = append(*set, b)
+	}
+	return
+}
+
+func querySet(set *[]blog, q *query) (s []blog) {
+	for _, v := range *set {
+		if q.Id == v.Id {
+			s = append(s, v)
+		} else if q.Keyword != "" {
+			re := regexp.MustCompile(`(?i)` + q.Keyword)
+			if re.MatchString(v.Title) || re.MatchString(v.Content) {
+				s = append(s, v)
+			}
+		}
+	}
+	return
 }

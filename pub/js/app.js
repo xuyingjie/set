@@ -88,7 +88,7 @@ app.controller('HomeController', function($scope, $http, $window, $location, $ro
   // $scope.commit = [];
 
   (function init() {
-    $http.post(url + 'list', {
+    $http.post(url + 'index', {
       title: 1
     }).success(
       function(data) {
