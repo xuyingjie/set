@@ -1,12 +1,12 @@
 var app = angular.module('app', ['ngRoute']);
 var url = '/';
 
-app.config(function($httpProvider) {
-  if (window.localStorage.name && window.localStorage.token) {
-    $httpProvider.defaults.headers.post.Name = window.localStorage.name;
-    $httpProvider.defaults.headers.post.Token = window.localStorage.token;
-  }
-});
+// app.config(function($httpProvider) {
+//   if (window.localStorage.name && window.localStorage.token) {
+//     $httpProvider.defaults.headers.post.Name = window.localStorage.name;
+//     $httpProvider.defaults.headers.post.Token = window.localStorage.token;
+//   }
+// });
 
 app.config(['$routeProvider', function($routeProvider) {
   $routeProvider
@@ -58,7 +58,7 @@ app.controller('NavController', function($scope, $rootScope, $http, $window, $lo
   };
 
   $scope.logout = function() {
-    $http.post(url + "logout.php").success(
+    $http.post(url + "logout").success(
       function(data) {
         if (data) {
           $window.localStorage.token = 0;
@@ -69,7 +69,7 @@ app.controller('NavController', function($scope, $rootScope, $http, $window, $lo
   };
 
   (function auth() {
-    $http.post(url + 'auth.php').success(
+    $http.post(url + 'auth').success(
       function(data) {
         if (data) {
           $rootScope.auth = true;
@@ -134,29 +134,34 @@ app.controller('SectionController', function($scope, $rootScope, $http, $window,
 
 app.controller('LoginController', function($scope, $rootScope, $http, $window, $location) {
 
+  $scope.name = '';
+  $scope.passwd = '';
+
   $scope.login = function() {
-    $http.post(url + "login.php", {
-      name: $scope.name,
-      passwd: $scope.passwd
-    }).success(
-      function(data) {
-        if (data) {
-          $window.localStorage.name = $scope.name;
-          $window.localStorage.token = data.token;
-          $http.defaults.headers.post.Name = $scope.name;
-          $http.defaults.headers.post.Token = data.token;
-          $rootScope.auth = true;
-          // console.log($rootScope.path);
-          if ($rootScope.path) {
-            $location.path($rootScope.path).replace();
-          } else {
-            $location.path('/').replace();
+    if ($scope.name !== '' && $scope.passwd !== '') {
+      $http.post(url + "login", {
+        name: $scope.name,
+        passwd: $scope.passwd
+      }).success(
+        function(data) {
+          if (data) {
+            // $window.localStorage.name = $scope.name;
+            // $window.localStorage.token = data.token;
+            // $http.defaults.headers.post.Name = $scope.name;
+            // $http.defaults.headers.post.Token = data.token;
+            $rootScope.auth = true;
+            // console.log($rootScope.path);
+            if ($rootScope.path) {
+              $location.path($rootScope.path).replace();
+            } else {
+              $location.path('/').replace();
+            }
           }
         }
-      }
-    );
+      );
 
-    $scope.passwd = '';
+      $scope.passwd = '';
+    }
   };
 });
 

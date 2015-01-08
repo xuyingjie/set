@@ -1,7 +1,6 @@
 /*
 ？title顺序，在前端调整
 ？上传图片插入到textarea，文件名+=timeDiff()
-？用户验证	http.Cookie
 */
 
 package main
@@ -17,8 +16,8 @@ import (
 	"encoding/json"
 	"strconv"
 	//"bytes"
+	"crypto/sha1"
 	"io/ioutil"
-	"log"
 	"regexp"
 	"time"
 )
@@ -33,14 +32,23 @@ type anchor struct {
 	Id    string `json:"id"`
 }
 type query struct {
-	Id      string `json:"id"`
-	Keyword string `json:"keyword"`
+	Id      string
+	Keyword string
+}
+type user struct {
+	Name   string
+	Passwd string
+}
+type token struct {
+	Name string
+	Uid  string
 }
 
 func main() {
 
 	var set []blog
 	var index []anchor
+	var tokenStore []token
 
 	c := oss.NewClient()
 	cache(c, &set, &index)
@@ -59,7 +67,7 @@ func main() {
 	})
 
 	http.HandleFunc("/put", func(w http.ResponseWriter, req *http.Request) {
-		if req.Method == "POST" {
+		if req.Method == "POST" && auth(req, &tokenStore) {
 			var b blog
 			s := jsonDecode(req.Body, &b)
 			if b.Title != "" {
@@ -67,6 +75,28 @@ func main() {
 				a := updateCache(b, id, &set, &index)
 				io.WriteString(w, jsonEncode(a))
 			}
+		}
+	})
+
+	http.HandleFunc("/login", func(w http.ResponseWriter, req *http.Request) {
+		if req.Method == "POST" {
+			var u user
+			jsonDecode(req.Body, &u)
+			if u.Name != "" && u.Passwd != "" {
+				if login(w, c, u, &tokenStore) {
+					io.WriteString(w, "200")
+				}
+			}
+		}
+	})
+	http.HandleFunc("/auth", func(w http.ResponseWriter, req *http.Request) {
+		if auth(req, &tokenStore) {
+			io.WriteString(w, "200")
+		}
+	})
+	http.HandleFunc("/logout", func(w http.ResponseWriter, req *http.Request) {
+		if logout(req, &tokenStore) {
+			io.WriteString(w, "200")
 		}
 	})
 
@@ -154,12 +184,12 @@ func jsonEncode(v interface{}) string {
 func cache(c *oss.Client, set *[]blog, index *[]anchor) {
 	objectList, err := c.GetBucket("dbmy", "t/", "", "", "")
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
 	}
 	for _, v := range objectList.Contents {
 		bytes, err := c.GetObject("/dbmy/"+v.Key, -1, -1)
 		if err != nil {
-			log.Fatalln(err)
+			fmt.Println(err)
 		}
 		var b blog
 		var a anchor
@@ -180,7 +210,7 @@ func putObject(c *oss.Client, b blog, s string) (id string) {
 
 	err := c.PutObjectFromString("/dbmy/t/"+id+".json", s)
 	if err != nil {
-		log.Fatalln(err)
+		fmt.Println(err)
 	}
 	return
 }
@@ -215,4 +245,65 @@ func querySet(set *[]blog, q *query) (s []blog) {
 		}
 	}
 	return
+}
+
+func sha1sum(s string) string {
+	data := []byte(s)
+	return fmt.Sprintf("%x", sha1.Sum(data))
+}
+
+// 或者使用成熟的session库
+func login(w http.ResponseWriter, c *oss.Client, u user, tokenStore *[]token) bool {
+
+	bytes, err := c.GetObject("/dbmy/etc/"+u.Name, -1, -1)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	if sha1sum(u.Passwd) == string(bytes) {
+		expiration := time.Now()
+		expiration = expiration.AddDate(1, 0, 0)
+
+		name := sha1sum(u.Name)
+		uid := sha1sum(timeDiff() + "31&rsv_t=4e3ek")
+		exist := false
+		for _, v := range *tokenStore {
+			if name == v.Name {
+				v.Uid = uid
+				exist = true
+			}
+		}
+		if !exist {
+			*tokenStore = append(*tokenStore, token{name, uid})
+		}
+
+		cookie := http.Cookie{Name: name, Value: uid, Expires: expiration}
+		http.SetCookie(w, &cookie)
+		return true
+	} else {
+		return false
+	}
+}
+
+func auth(req *http.Request, tokenStore *[]token) bool {
+	for _, cookie := range req.Cookies() {
+		for _, v := range *tokenStore {
+			if cookie.Name == v.Name && cookie.Value == v.Uid {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func logout(req *http.Request, tokenStore *[]token) bool {
+	for _, cookie := range req.Cookies() {
+		for k, v := range *tokenStore {
+			if cookie.Name == v.Name {
+				(*tokenStore)[k].Uid = sha1sum(timeDiff() + "31&rsv_t=4es3ek")
+				return true
+			}
+		}
+	}
+	return false
 }
