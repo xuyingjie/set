@@ -1,6 +1,6 @@
 /*
 ？title顺序，在前端调整
-？上传图片插入到textarea，文件名+=timeDiff()
+？上传图片插入到textarea，文件名+=TimeDiff()
 */
 
 package main
@@ -14,10 +14,7 @@ import (
 	//"os"
 	"./oss"
 	"encoding/json"
-	"strconv"
 	//"bytes"
-	"crypto/sha1"
-	"io/ioutil"
 	"regexp"
 	"time"
 )
@@ -49,31 +46,33 @@ func main() {
 	var set []blog
 	var index []anchor
 	var tokenStore []token
+	key := ``
 
 	c := oss.NewClient()
-	cache(c, &set, &index)
+	cache(c, key, &set, &index)
 
 	//
 	http.HandleFunc("/index", func(w http.ResponseWriter, req *http.Request) {
-		io.WriteString(w, jsonEncode(index))
+		io.WriteString(w, JsonEncode(index))
 	})
 
 	http.HandleFunc("/get", func(w http.ResponseWriter, req *http.Request) {
 		var q query
-		jsonDecode(req.Body, &q)
+		JsonDecode(req.Body, &q)
 		s := querySet(&set, &q)
 
-		io.WriteString(w, jsonEncode(s))
+		io.WriteString(w, JsonEncode(s))
 	})
 
 	http.HandleFunc("/put", func(w http.ResponseWriter, req *http.Request) {
 		if req.Method == "POST" && auth(req, &tokenStore) {
 			var b blog
-			s := jsonDecode(req.Body, &b)
+			bytes := JsonDecode(req.Body, &b)
+			enc, _ := AESEncrypt([]byte(key), bytes)
 			if b.Title != "" {
-				id := putObject(c, b, s)
+				id := putObject(c, b, string(enc))
 				a := updateCache(b, id, &set, &index)
-				io.WriteString(w, jsonEncode(a))
+				io.WriteString(w, JsonEncode(a))
 			}
 		}
 	})
@@ -81,7 +80,7 @@ func main() {
 	http.HandleFunc("/login", func(w http.ResponseWriter, req *http.Request) {
 		if req.Method == "POST" {
 			var u user
-			jsonDecode(req.Body, &u)
+			JsonDecode(req.Body, &u)
 			if u.Name != "" && u.Passwd != "" {
 				if login(w, c, u, &tokenStore) {
 					io.WriteString(w, "200")
@@ -126,9 +125,9 @@ func main() {
 
 //			if _, err := os.Stat("./pub/upload/" + filename); err == nil {
 //				if strings.Index(filename, ".") == -1 {
-//					filename += timeDiff()
+//					filename += TimeDiff()
 //				} else {
-//					filename = strings.Replace(filename, ".", timeDiff()+".", 1) // ?.tar.xz
+//					filename = strings.Replace(filename, ".", TimeDiff()+".", 1) // ?.tar.xz
 //				}
 //			}
 
@@ -152,36 +151,8 @@ func main() {
 //	}
 //}
 
-func timeDiff() string {
-	now := time.Now()
-	then := time.Date(2014, 05, 10, 0, 0, 0, 0, time.Local)
-	diff := now.Sub(then).Nanoseconds()
-
-	return strconv.FormatInt(diff, 10)
-}
-
-func jsonDecode(reader io.Reader, v interface{}) string {
-	bytes, err := ioutil.ReadAll(reader)
-	if err != nil {
-		fmt.Println(err)
-	}
-	err = json.Unmarshal(bytes, v)
-	if err != nil {
-		fmt.Println("json err:", err)
-	}
-	return string(bytes)
-}
-
-func jsonEncode(v interface{}) string {
-	bytes, err := json.Marshal(v)
-	if err != nil {
-		fmt.Println("json err:", err)
-	}
-	return string(bytes)
-}
-
 // 缓存全部oss数据
-func cache(c *oss.Client, set *[]blog, index *[]anchor) {
+func cache(c *oss.Client, key string, set *[]blog, index *[]anchor) {
 	objectList, err := c.GetBucket("dbmy", "t/", "", "", "")
 	if err != nil {
 		fmt.Println(err)
@@ -191,9 +162,10 @@ func cache(c *oss.Client, set *[]blog, index *[]anchor) {
 		if err != nil {
 			fmt.Println(err)
 		}
+		dec, _ := AESDecrypt([]byte(key), bytes)
 		var b blog
 		var a anchor
-		json.Unmarshal(bytes, &b)
+		json.Unmarshal(dec, &b)
 		b.Id = strings.TrimRight(strings.TrimLeft(v.Key, "t/"), ".json") // other
 		a.Title, a.Id = b.Title, b.Id
 		*index = append(*index, a)
@@ -205,7 +177,7 @@ func putObject(c *oss.Client, b blog, s string) (id string) {
 	if b.Id != "" {
 		id = b.Id
 	} else {
-		id = timeDiff()
+		id = TimeDiff()
 	}
 
 	err := c.PutObjectFromString("/dbmy/t/"+id+".json", s)
@@ -247,11 +219,6 @@ func querySet(set *[]blog, q *query) (s []blog) {
 	return
 }
 
-func sha1sum(s string) string {
-	data := []byte(s)
-	return fmt.Sprintf("%x", sha1.Sum(data))
-}
-
 // 或者使用成熟的session库
 func login(w http.ResponseWriter, c *oss.Client, u user, tokenStore *[]token) bool {
 
@@ -260,16 +227,16 @@ func login(w http.ResponseWriter, c *oss.Client, u user, tokenStore *[]token) bo
 		fmt.Println(err)
 	}
 
-	if sha1sum(u.Passwd) == string(bytes) {
+	if Sha1sum(u.Passwd) == string(bytes) {
 		expiration := time.Now()
 		expiration = expiration.AddDate(1, 0, 0)
 
-		name := sha1sum(u.Name)
-		uid := sha1sum(timeDiff() + "31&rsv_t=4e3ek")
+		name := Sha1sum(u.Name)
+		uid := Sha1sum(TimeDiff() + "31&rsv_t=4e3ek")
 		exist := false
-		for _, v := range *tokenStore {
+		for k, v := range *tokenStore {
 			if name == v.Name {
-				v.Uid = uid
+				(*tokenStore)[k].Uid = uid
 				exist = true
 			}
 		}
@@ -300,7 +267,7 @@ func logout(req *http.Request, tokenStore *[]token) bool {
 	for _, cookie := range req.Cookies() {
 		for k, v := range *tokenStore {
 			if cookie.Name == v.Name {
-				(*tokenStore)[k].Uid = sha1sum(timeDiff() + "31&rsv_t=4es3ek")
+				(*tokenStore)[k].Uid = Sha1sum(TimeDiff() + "31&rsv_t=4es3ek")
 				return true
 			}
 		}
