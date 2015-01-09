@@ -6,16 +6,14 @@
 package main
 
 import (
-	"io"
-	"strings"
-	//. "./qiniu"
-	"fmt"
-	"net/http"
-	//"os"
+	"./crypt"
 	"./oss"
 	"encoding/json"
-	//"bytes"
+	"fmt"
+	"io"
+	"net/http"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -48,7 +46,7 @@ func main() {
 	var tokenStore []token
 	key := ``
 
-	c := oss.NewClient()
+	c := oss.NewClient(")
 	cache(c, key, &set, &index)
 
 	//
@@ -68,7 +66,7 @@ func main() {
 		if req.Method == "POST" && auth(req, &tokenStore) {
 			var b blog
 			bytes := JsonDecode(req.Body, &b)
-			enc, _ := AESEncrypt([]byte(key), bytes)
+			enc, _ := crypt.Encrypt(key, bytes)
 			if b.Title != "" {
 				id := putObject(c, b, string(enc))
 				a := updateCache(b, id, &set, &index)
@@ -162,11 +160,11 @@ func cache(c *oss.Client, key string, set *[]blog, index *[]anchor) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		dec, _ := AESDecrypt([]byte(key), bytes)
+		dec, _ := crypt.Decrypt(key, bytes)
 		var b blog
 		var a anchor
 		json.Unmarshal(dec, &b)
-		b.Id = strings.TrimRight(strings.TrimLeft(v.Key, "t/"), ".json") // other
+		b.Id = strings.TrimLeft(v.Key, "t/")
 		a.Title, a.Id = b.Title, b.Id
 		*index = append(*index, a)
 		*set = append(*set, b)
@@ -180,7 +178,7 @@ func putObject(c *oss.Client, b blog, s string) (id string) {
 		id = TimeDiff()
 	}
 
-	err := c.PutObjectFromString("/dbmy/t/"+id+".json", s)
+	err := c.PutObjectFromString("/dbmy/t/"+id, s)
 	if err != nil {
 		fmt.Println(err)
 	}
