@@ -28,11 +28,11 @@ app.config(['$routeProvider', function($routeProvider) {
     })
     .when('/a', {
       templateUrl: 'views/editor.html',
-      controller: 'AddController'
+      controller: 'PutController'
     })
     .when('/e/:id', {
       templateUrl: 'views/editor.html',
-      controller: 'UpdateController'
+      controller: 'PutController'
     });
 
 }]);
@@ -165,52 +165,28 @@ app.controller('LoginController', function($scope, $rootScope, $http, $window, $
   };
 });
 
-app.controller('AddController', function($scope, $http, $location) {
+app.controller('PutController', function($scope, $rootScope, $http, $location, $routeParams) {
 
-  $scope.title = '';
-  $scope.content = ''; // or undefined
-
-  $scope.save = function() {
-    if ($scope.title !== '') {
-      var data = {
-        title: $scope.title,
-        content: $scope.content,
-        id: ''
-      };
-      $http.post(url + "put", data).success(
-        function(data) {
-          if (data) {
-            $location.path('/t/' + data.id).replace();
-            $scope.title = '';
-            $scope.content = '';
-          }
-        }
-      );
-    }
-  };
-
-});
-
-app.controller('UpdateController', function($scope, $rootScope, $http, $location, $routeParams) {
-
-  $scope.id = 0;
+  $scope.id = '';
   $scope.title = '';
   $scope.content = ''; // or undefined
 
   (function init() {
-    $http.post(url + 'get', {
-      id: $routeParams.id
-    }).success(
-      function(data) {
-        if (data) {
-          $scope.title = data[0].title;
-          $scope.content = data[0].content;
-          $scope.id = data[0].id;
-        } else {
-          $location.path($rootScope.path).replace();
+    if ($routeParams.id){
+      $http.post(url + 'get', {
+        id: $routeParams.id
+      }).success(
+        function(data) {
+          if (data) {
+            $scope.title = data[0].title;
+            $scope.content = data[0].content;
+            $scope.id = data[0].id;
+          } else {
+            $location.path($rootScope.path).replace();
+          }
         }
-      }
-    );
+      );
+    }
   })();
 
   $scope.save = function() {
@@ -223,8 +199,8 @@ app.controller('UpdateController', function($scope, $rootScope, $http, $location
       $http.post(url + "put", data).success(
         function(data) {
           if (data) {
-            $location.path('/t/' + $scope.id).replace();
-            $scope.id = 0;
+            $location.path('/t/' + data.id).replace();
+            $scope.id = '';
             $scope.title = '';
             $scope.content = '';
           }
@@ -232,6 +208,52 @@ app.controller('UpdateController', function($scope, $rootScope, $http, $location
       );
     }
   };
+
+  var form = document.forms.namedItem("fileinfo");
+
+  form.addEventListener('submit', function(ev) {
+    var oData = new FormData(document.forms.namedItem("fileinfo"));
+    var progress = document.getElementById('uploadprogress');
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "upload", true);
+    xhr.upload.onprogress = function (event) {
+      if (event.lengthComputable) {
+        var complete = (event.loaded / event.total * 100 | 0);
+        progress.value = progress.innerHTML = complete;
+      }
+    };
+    xhr.onload = function(oEvent) {
+      if (xhr.status == 200) {
+        var c = xhr.responseText;
+
+        $scope.content = $scope.content + c;
+        var textarea = document.getElementById('content');
+        insertText(textarea, c);
+
+        document.getElementById("file").value = "";
+        progress.value = 0;
+      }
+    };
+    xhr.send(oData);
+    ev.preventDefault();
+  }, false);
+
+  function insertText(obj,str) {
+    if (document.selection) {
+      var sel = document.selection.createRange();
+      sel.text = str;
+    } else if (typeof obj.selectionStart === 'number' && typeof obj.selectionEnd === 'number') {
+      var startPos = obj.selectionStart,
+      endPos = obj.selectionEnd,
+      cursorPos = startPos,
+      tmpStr = obj.value;
+      obj.value = tmpStr.substring(0, startPos) + str + tmpStr.substring(endPos, tmpStr.length);
+      cursorPos += str.length;
+      obj.selectionStart = obj.selectionEnd = cursorPos;
+    } else {
+      obj.value += str;
+    }
+  }
 
 });
 

@@ -1,6 +1,5 @@
 /*
 ？title顺序，在前端调整
-？上传图片插入到textarea，文件名+=TimeDiff()
 */
 
 package main
@@ -10,8 +9,12 @@ import (
 	"./oss"
 	"encoding/json"
 	"fmt"
+	//"github.com/drone/routes"
 	"io"
+	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -30,6 +33,7 @@ type query struct {
 	Id      string
 	Keyword string
 }
+
 type user struct {
 	Name   string
 	Passwd string
@@ -46,7 +50,7 @@ func main() {
 	var tokenStore []token
 	key := ``
 
-	c := oss.NewClient(")
+	c := oss.NewClient()
 	cache(c, key, &set, &index)
 
 	//
@@ -97,57 +101,19 @@ func main() {
 		}
 	})
 
-	//http.HandleFunc("/upload", upload)
+	http.HandleFunc("/upload", func(w http.ResponseWriter, req *http.Request) {
+		upload(c, w, req)
+	})
+	//mux := routes.New()
+	//mux.Get("/p/:name", func(w http.ResponseWriter, req *http.Request) {
+	//	getPic(c, w, req)
+	//})
 
 	http.Handle("/", http.FileServer(http.Dir("pub")))
 
 	fmt.Println(`http.ListenAndServe(":8080", nil)`)
 	http.ListenAndServe(":8080", nil)
 }
-
-//func upload(w http.ResponseWriter, r *http.Request) {
-//	if r.Method == "POST" {
-//		r.ParseMultipartForm(32 << 20)
-//		//file, handler, err := r.FormFile("file")
-//		files := r.MultipartForm.File["file"]
-//		var s string
-
-//		for _, handler := range files {
-//			filename := handler.Filename
-//			file, err := handler.Open()
-//			if err != nil {
-//				fmt.Println(err)
-//				return
-//			}
-//			defer file.Close()
-
-//			if _, err := os.Stat("./pub/upload/" + filename); err == nil {
-//				if strings.Index(filename, ".") == -1 {
-//					filename += TimeDiff()
-//				} else {
-//					filename = strings.Replace(filename, ".", TimeDiff()+".", 1) // ?.tar.xz
-//				}
-//			}
-
-//			path := "./pub/upload/" + filename
-//			f, err := os.Create(path)
-//			if err != nil {
-//				fmt.Println(err)
-//				return
-//			}
-//			defer f.Close()
-//			io.Copy(f, file)
-
-//			fi := strings.ToLower(filename)
-//			if strings.HasSuffix(fi, ".png") || strings.HasSuffix(fi, ".jpg") || strings.HasSuffix(fi, ".gif") {
-//				s += `<img style="max-width:100%;" src="` + path + `">`
-//			} else {
-//				s += `<div style="background:#f5f6f7;border:1px dashed #C9C9C9;padding:5px 10px;"><a href="` + path + `">` + filename + `</a></div><br>`
-//			}
-//		}
-//		fmt.Fprint(w, s)
-//	}
-//}
 
 // 缓存全部oss数据
 func cache(c *oss.Client, key string, set *[]blog, index *[]anchor) {
@@ -271,4 +237,77 @@ func logout(req *http.Request, tokenStore *[]token) bool {
 		}
 	}
 	return false
+}
+
+//
+func upload(c *oss.Client, w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		r.ParseMultipartForm(32 << 20)
+		//file, handler, err := r.FormFile("file")
+		files := r.MultipartForm.File["file"]
+		var s string
+
+		for _, v := range files {
+			filename := TimeDiff() + "_" + v.Filename
+			file, err := v.Open()
+			if err != nil {
+				fmt.Println(err)
+			}
+			defer file.Close()
+
+			//err = c.PutObjectFromReader("/dbmy/p/"+filename, file)
+			//if err != nil {
+			//	fmt.Println(err)
+			//}
+
+			path := "./cache/" + filename
+			f, err := os.Create(path)
+			if err != nil {
+				fmt.Println(err)
+			}
+			defer f.Close()
+			io.Copy(f, file)
+
+			err = c.PutObject("/dbmy/p/"+filename, path)
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			s += "\n![](/p/" + filename + ")\n"
+		}
+		fmt.Fprint(w, s)
+	}
+}
+
+func getPic(c *oss.Client, w http.ResponseWriter, r *http.Request) {
+
+	params := r.URL.Query()
+	filename := params.Get(":name")
+	fmt.Println("Name: " + filename)
+
+	//if _, err := os.Stat("./cache/" + filename); err != nil {
+	//	bytes, err := c.GetObject("/dbmy/p/"+filename, -1, -1)
+
+	//	path := "./cache/" + filename
+	//	f, err := os.Create(path)
+	//	if err != nil {
+	//		fmt.Println(err)
+	//	}
+	//	defer f.Close()
+	//	io.Copy(f, bytes)
+	//}
+
+	file, err := os.Open("./cache/" + filename) // For read access.
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	bytes, err := ioutil.ReadAll(file)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	w.Header().Add("Content-Disposition", "filename="+filename)
+	w.Write(bytes)
 }

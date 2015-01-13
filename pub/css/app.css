@@ -83,6 +83,17 @@ pre > code {
   box-shadow: none;
 }
 
+input[type="file"] {
+  display: inline-block;
+  /*margin-left: -66px;
+  width: 66px;
+  height: 34px;
+  overflow: hidden;
+  z-index: 0;
+  line-height: 34px;
+  opacity: 0;*/
+}
+
 
 .dbmy {
 /*   color: #333 !important; */
