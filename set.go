@@ -9,10 +9,9 @@ import (
 	"./oss"
 	"encoding/json"
 	"fmt"
-	//"github.com/drone/routes"
+	"github.com/Unknwon/macaron"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -54,20 +53,22 @@ func main() {
 	cache(c, key, &set, &index)
 
 	//
-	http.HandleFunc("/index", func(w http.ResponseWriter, req *http.Request) {
-		io.WriteString(w, JsonEncode(index))
+	m := macaron.Classic()
+
+	m.Post("/index", func() string {
+		return JsonEncode(index)
 	})
 
-	http.HandleFunc("/get", func(w http.ResponseWriter, req *http.Request) {
+	m.Post("/get", func(ctx *macaron.Context) string {
 		var q query
-		JsonDecode(req.Body, &q)
+		JsonDecode(ctx.Req.Body().ReadCloser(), &q)
 		s := querySet(&set, &q)
 
-		io.WriteString(w, JsonEncode(s))
+		return JsonEncode(s)
 	})
 
-	http.HandleFunc("/put", func(w http.ResponseWriter, req *http.Request) {
-		if req.Method == "POST" && auth(req, &tokenStore) {
+	m.Post("/put", func(w http.ResponseWriter, req *http.Request) {
+		if auth(req, &tokenStore) {
 			var b blog
 			bytes := JsonDecode(req.Body, &b)
 			enc, _ := crypt.Encrypt(key, bytes)
@@ -79,40 +80,35 @@ func main() {
 		}
 	})
 
-	http.HandleFunc("/login", func(w http.ResponseWriter, req *http.Request) {
-		if req.Method == "POST" {
-			var u user
-			JsonDecode(req.Body, &u)
-			if u.Name != "" && u.Passwd != "" {
-				if login(w, c, u, &tokenStore) {
-					io.WriteString(w, "200")
-				}
+	m.Post("/login", func(w http.ResponseWriter, req *http.Request) {
+		var u user
+		JsonDecode(req.Body, &u)
+		if u.Name != "" && u.Passwd != "" {
+			if login(w, c, u, &tokenStore) {
+				io.WriteString(w, "200")
 			}
 		}
 	})
-	http.HandleFunc("/auth", func(w http.ResponseWriter, req *http.Request) {
+	m.Post("/auth", func(w http.ResponseWriter, req *http.Request) {
 		if auth(req, &tokenStore) {
 			io.WriteString(w, "200")
 		}
 	})
-	http.HandleFunc("/logout", func(w http.ResponseWriter, req *http.Request) {
+	m.Post("/logout", func(w http.ResponseWriter, req *http.Request) {
 		if logout(req, &tokenStore) {
 			io.WriteString(w, "200")
 		}
 	})
 
-	http.HandleFunc("/upload", func(w http.ResponseWriter, req *http.Request) {
+	m.Post("/upload", func(w http.ResponseWriter, req *http.Request) {
 		upload(c, w, req)
 	})
-	//mux := routes.New()
-	//mux.Get("/p/:name", func(w http.ResponseWriter, req *http.Request) {
-	//	getPic(c, w, req)
-	//})
+	m.Get("/p/:name", func(ctx *macaron.Context) {
+		getPic(c, ctx)
+	})
 
-	http.Handle("/", http.FileServer(http.Dir("pub")))
-
-	fmt.Println(`http.ListenAndServe(":8080", nil)`)
-	http.ListenAndServe(":8080", nil)
+	m.Use(macaron.Static("pub"))
+	m.Run()
 }
 
 // 缓存全部oss数据
@@ -279,27 +275,23 @@ func upload(c *oss.Client, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getPic(c *oss.Client, w http.ResponseWriter, r *http.Request) {
+func getPic(c *oss.Client, ctx *macaron.Context) {
 
-	params := r.URL.Query()
-	filename := params.Get(":name")
+	filename := ctx.Params(":name")
 	fmt.Println("Name: " + filename)
 
-	//if _, err := os.Stat("./cache/" + filename); err != nil {
-	//	bytes, err := c.GetObject("/dbmy/p/"+filename, -1, -1)
+	if _, err := os.Stat("./cache/" + filename); err != nil {
+		bytes, err := c.GetObject("/dbmy/p/"+filename, -1, -1)
 
-	//	path := "./cache/" + filename
-	//	f, err := os.Create(path)
-	//	if err != nil {
-	//		fmt.Println(err)
-	//	}
-	//	defer f.Close()
-	//	io.Copy(f, bytes)
-	//}
+		err = ioutil.WriteFile("./cache/"+filename, bytes, 0644)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
 
 	file, err := os.Open("./cache/" + filename) // For read access.
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 	}
 	defer file.Close()
 
@@ -308,6 +300,6 @@ func getPic(c *oss.Client, w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 	}
 
-	w.Header().Add("Content-Disposition", "filename="+filename)
-	w.Write(bytes)
+	//.Header().Add("Content-Disposition", "filename="+filename)
+	ctx.Resp.Write(bytes)
 }
