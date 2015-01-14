@@ -1,18 +1,11 @@
-/*
-？title顺序，在前端调整
-*/
-
 package main
 
 import (
-	"./crypt"
-	"./oss"
+	"code.google.com/p/rsc/crypt"
 	"encoding/json"
 	"fmt"
-	//"io"
-	//"io/ioutil"
+	"github.com/xuyingjie/set/oss"
 	"net/http"
-	//"os"
 	"regexp"
 	"strings"
 	"time"
@@ -252,19 +245,6 @@ func upload(w http.ResponseWriter, r *http.Request) {
 				fmt.Println(err)
 			}
 
-			//path := "./cache/" + filename
-			//f, err := os.Create(path)
-			//if err != nil {
-			//	fmt.Println(err)
-			//}
-			//defer f.Close()
-			//io.Copy(f, file)
-
-			//err = c.PutObject("/dbmy/p/"+filename, path)
-			//if err != nil {
-			//	fmt.Println(err)
-			//}
-
 			s += "\n![](/p/" + filename + ")\n"
 		}
 		fmt.Fprint(w, s)
@@ -276,28 +256,10 @@ func getPic(w http.ResponseWriter, req *http.Request) {
 	path := req.URL.Path
 	filename := strings.TrimLeft(path, "/p/")
 
-	//if _, err := os.Stat("./cache/" + filename); err != nil {
 	bytes, err := c.GetObject("/dbmy/p/"+filename, -1, -1)
 	if err != nil {
 		fmt.Println(err)
 	}
-
-	//err = ioutil.WriteFile("./cache/"+filename, bytes, 0644)
-	//if err != nil {
-	//	fmt.Println(err)
-	//}
-	//}
-
-	//file, err := os.Open("./cache/" + filename) // For read access.
-	//if err != nil {
-	//	fmt.Println(err)
-	//}
-	//defer file.Close()
-
-	//bytes, err := ioutil.ReadAll(file)
-	//if err != nil {
-	//	fmt.Println(err)
-	//}
 
 	w.Header().Add("Content-Disposition", "filename="+filename)
 	w.Write(bytes)

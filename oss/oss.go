@@ -510,7 +510,7 @@ func (c *Client) PutObject(opath string, filepath string) (err error) {
 	return
 }
 
-//Upload object by its remote path and local file path. The format of remote path is "/bucketName/objectName".
+//The format of remote path is "/bucketName/objectName".
 func (c *Client) PutObjectFromReader(opath string, reader io.Reader) (err error) {
 	if strings.HasPrefix(opath, "/") == false {
 		opath = "/" + opath
@@ -541,7 +541,7 @@ func (c *Client) PutObjectFromReader(opath string, reader io.Reader) (err error)
 	return
 }
 
-//Upload object by its remote path and local file path. The format of remote path is "/bucketName/objectName".
+//The format of remote path is "/bucketName/objectName".
 func (c *Client) PutObjectFromString(opath, s string) (err error) {
 	if strings.HasPrefix(opath, "/") == false {
 		opath = "/" + opath
