@@ -1,9 +1,9 @@
 package main
 
 import (
-	"code.google.com/p/rsc/crypt"
 	"encoding/json"
 	"fmt"
+	"github.com/xuyingjie/set/crypt"
 	"github.com/xuyingjie/set/oss"
 	"net/http"
 	"regexp"

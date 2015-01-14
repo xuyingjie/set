@@ -3,7 +3,8 @@
 // license that can be found in the LICENSE file.
 
 // Package crypt provides simple, password-based encryption and decryption of data blobs.
-package crypt  // import "code.google.com/p/rsc/crypt"
+// code.google.com/p/rsc/source/browse/crypt/crypt.go
+package crypt
 
 import (
 	"bytes"
