@@ -9,11 +9,10 @@ import (
 	"./oss"
 	"encoding/json"
 	"fmt"
-	"github.com/Unknwon/macaron"
-	"io"
-	"io/ioutil"
+	//"io"
+	//"io/ioutil"
 	"net/http"
-	"os"
+	//"os"
 	"regexp"
 	"strings"
 	"time"
@@ -42,77 +41,50 @@ type token struct {
 	Uid  string
 }
 
+var set []blog
+var index []anchor
+var tokenStore []token
+var c *oss.Client
+
+const key = ``
+
 func main() {
 
-	var set []blog
-	var index []anchor
-	var tokenStore []token
-	key := ``
-
-	c := oss.NewClient()
-	cache(c, key, &set, &index)
+	c = oss.NewClient()
+	cache()
 
 	//
-	m := macaron.Classic()
-
-	m.Post("/index", func() string {
-		return JsonEncode(index)
+	http.HandleFunc("/index", func(w http.ResponseWriter, req *http.Request) {
+		fmt.Fprintf(w, string(JsonEncode(index)))
 	})
+	http.HandleFunc("/get", querySet)
+	http.HandleFunc("/put", putObject)
 
-	m.Post("/get", func(ctx *macaron.Context) string {
-		var q query
-		JsonDecode(ctx.Req.Body().ReadCloser(), &q)
-		s := querySet(&set, &q)
-
-		return JsonEncode(s)
+	//
+	http.HandleFunc("/login", login)
+	http.HandleFunc("/auth", func(w http.ResponseWriter, req *http.Request) {
+		if auth(w, req) {
+			fmt.Fprintf(w, "true")
+		}
 	})
-
-	m.Post("/put", func(w http.ResponseWriter, req *http.Request) {
-		if auth(req, &tokenStore) {
-			var b blog
-			bytes := JsonDecode(req.Body, &b)
-			enc, _ := crypt.Encrypt(key, bytes)
-			if b.Title != "" {
-				id := putObject(c, b, string(enc))
-				a := updateCache(b, id, &set, &index)
-				io.WriteString(w, JsonEncode(a))
-			}
+	http.HandleFunc("/logout", func(w http.ResponseWriter, req *http.Request) {
+		if logout(w, req) {
+			fmt.Fprintf(w, "true")
 		}
 	})
 
-	m.Post("/login", func(w http.ResponseWriter, req *http.Request) {
-		var u user
-		JsonDecode(req.Body, &u)
-		if u.Name != "" && u.Passwd != "" {
-			if login(w, c, u, &tokenStore) {
-				io.WriteString(w, "200")
-			}
-		}
-	})
-	m.Post("/auth", func(w http.ResponseWriter, req *http.Request) {
-		if auth(req, &tokenStore) {
-			io.WriteString(w, "200")
-		}
-	})
-	m.Post("/logout", func(w http.ResponseWriter, req *http.Request) {
-		if logout(req, &tokenStore) {
-			io.WriteString(w, "200")
-		}
-	})
+	//
+	http.HandleFunc("/upload", upload)
+	http.HandleFunc("/p/", getPic)
 
-	m.Post("/upload", func(w http.ResponseWriter, req *http.Request) {
-		upload(c, w, req)
-	})
-	m.Get("/p/:name", func(ctx *macaron.Context) {
-		getPic(c, ctx)
-	})
+	http.Handle("/", http.FileServer(http.Dir("pub")))
 
-	m.Use(macaron.Static("pub"))
-	m.Run()
+	fmt.Println(`http.ListenAndServe(":8080", nil)`)
+	http.ListenAndServe(":8080", nil)
 }
 
 // 缓存全部oss数据
-func cache(c *oss.Client, key string, set *[]blog, index *[]anchor) {
+func cache() {
 	objectList, err := c.GetBucket("dbmy", "t/", "", "", "")
 	if err != nil {
 		fmt.Println(err)
@@ -128,45 +100,19 @@ func cache(c *oss.Client, key string, set *[]blog, index *[]anchor) {
 		json.Unmarshal(dec, &b)
 		b.Id = strings.TrimLeft(v.Key, "t/")
 		a.Title, a.Id = b.Title, b.Id
-		*index = append(*index, a)
-		*set = append(*set, b)
+		index = append(index, a)
+		set = append(set, b)
 	}
 }
 
-func putObject(c *oss.Client, b blog, s string) (id string) {
-	if b.Id != "" {
-		id = b.Id
-	} else {
-		id = TimeDiff()
-	}
+func querySet(w http.ResponseWriter, req *http.Request) {
 
-	err := c.PutObjectFromString("/dbmy/t/"+id, s)
-	if err != nil {
-		fmt.Println(err)
-	}
-	return
-}
+	var q query
+	var s []blog
 
-func updateCache(b blog, id string, set *[]blog, index *[]anchor) (a anchor) {
-	if b.Id != "" {
-		a.Title, a.Id = b.Title, b.Id
-		for k, v := range *index {
-			if b.Id == v.Id {
-				(*index)[k] = a
-				(*set)[k] = b
-			}
-		}
-	} else {
-		b.Id = id
-		a.Title, a.Id = b.Title, b.Id
-		*index = append(*index, a)
-		*set = append(*set, b)
-	}
-	return
-}
+	JsonDecode(req.Body, &q)
 
-func querySet(set *[]blog, q *query) (s []blog) {
-	for _, v := range *set {
+	for _, v := range set {
 		if q.Id == v.Id {
 			s = append(s, v)
 		} else if q.Keyword != "" {
@@ -176,45 +122,95 @@ func querySet(set *[]blog, q *query) (s []blog) {
 			}
 		}
 	}
-	return
+	fmt.Fprintf(w, string(JsonEncode(s)))
+}
+
+func putObject(w http.ResponseWriter, req *http.Request) {
+
+	if req.Method == "POST" && auth(w, req) {
+
+		var b blog
+		JsonDecode(req.Body, &b)
+
+		if b.Title != "" {
+
+			var a anchor
+			var id string
+
+			if b.Id != "" {
+				id = b.Id
+				a.Title, a.Id = b.Title, b.Id
+				for k, v := range index {
+					if b.Id == v.Id {
+						index[k] = a
+						set[k] = b
+					}
+				}
+			} else {
+				b.Id = TimeDiff()
+				id = b.Id
+				a.Title, a.Id = b.Title, b.Id
+				index = append(index, a)
+				set = append(set, b)
+			}
+
+			bytes := JsonEncode(b)
+			enc, _ := crypt.Encrypt(key, bytes)
+			err := c.PutObjectFromString("/dbmy/t/"+id, string(enc))
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			fmt.Fprintf(w, string(JsonEncode(a)))
+		}
+	}
+
 }
 
 // 或者使用成熟的session库
-func login(w http.ResponseWriter, c *oss.Client, u user, tokenStore *[]token) bool {
+func login(w http.ResponseWriter, req *http.Request) {
 
-	bytes, err := c.GetObject("/dbmy/etc/"+u.Name, -1, -1)
-	if err != nil {
-		fmt.Println(err)
-	}
+	if req.Method == "POST" {
 
-	if Sha1sum(u.Passwd) == string(bytes) {
-		expiration := time.Now()
-		expiration = expiration.AddDate(1, 0, 0)
+		var u user
+		JsonDecode(req.Body, &u)
 
-		name := Sha1sum(u.Name)
-		uid := Sha1sum(TimeDiff() + "31&rsv_t=4e3ek")
-		exist := false
-		for k, v := range *tokenStore {
-			if name == v.Name {
-				(*tokenStore)[k].Uid = uid
-				exist = true
+		if u.Name != "" && u.Passwd != "" {
+
+			bytes, err := c.GetObject("/dbmy/etc/"+u.Name, -1, -1)
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			if Sha1sum(u.Passwd) == string(bytes) {
+
+				expiration := time.Now()
+				expiration = expiration.AddDate(1, 0, 0)
+
+				name := Sha1sum(u.Name)
+				uid := Sha1sum(TimeDiff() + "31&rsv_t=4e3ek")
+				exist := false
+				for k, v := range tokenStore {
+					if name == v.Name {
+						(tokenStore)[k].Uid = uid
+						exist = true
+					}
+				}
+				if !exist {
+					tokenStore = append(tokenStore, token{name, uid})
+				}
+
+				cookie := http.Cookie{Name: name, Value: uid, Expires: expiration}
+				http.SetCookie(w, &cookie)
+				fmt.Fprintf(w, "true")
 			}
 		}
-		if !exist {
-			*tokenStore = append(*tokenStore, token{name, uid})
-		}
-
-		cookie := http.Cookie{Name: name, Value: uid, Expires: expiration}
-		http.SetCookie(w, &cookie)
-		return true
-	} else {
-		return false
 	}
 }
 
-func auth(req *http.Request, tokenStore *[]token) bool {
+func auth(w http.ResponseWriter, req *http.Request) bool {
 	for _, cookie := range req.Cookies() {
-		for _, v := range *tokenStore {
+		for _, v := range tokenStore {
 			if cookie.Name == v.Name && cookie.Value == v.Uid {
 				return true
 			}
@@ -223,11 +219,11 @@ func auth(req *http.Request, tokenStore *[]token) bool {
 	return false
 }
 
-func logout(req *http.Request, tokenStore *[]token) bool {
+func logout(w http.ResponseWriter, req *http.Request) bool {
 	for _, cookie := range req.Cookies() {
-		for k, v := range *tokenStore {
+		for k, v := range tokenStore {
 			if cookie.Name == v.Name {
-				(*tokenStore)[k].Uid = Sha1sum(TimeDiff() + "31&rsv_t=4es3ek")
+				(tokenStore)[k].Uid = Sha1sum(TimeDiff() + "31&rsv_t=4es3ek")
 				return true
 			}
 		}
@@ -236,7 +232,7 @@ func logout(req *http.Request, tokenStore *[]token) bool {
 }
 
 //
-func upload(c *oss.Client, w http.ResponseWriter, r *http.Request) {
+func upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		r.ParseMultipartForm(32 << 20)
 		//file, handler, err := r.FormFile("file")
@@ -251,23 +247,23 @@ func upload(c *oss.Client, w http.ResponseWriter, r *http.Request) {
 			}
 			defer file.Close()
 
-			//err = c.PutObjectFromReader("/dbmy/p/"+filename, file)
+			err = c.PutObjectFromReader("/dbmy/p/"+filename, file)
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			//path := "./cache/" + filename
+			//f, err := os.Create(path)
 			//if err != nil {
 			//	fmt.Println(err)
 			//}
+			//defer f.Close()
+			//io.Copy(f, file)
 
-			path := "./cache/" + filename
-			f, err := os.Create(path)
-			if err != nil {
-				fmt.Println(err)
-			}
-			defer f.Close()
-			io.Copy(f, file)
-
-			err = c.PutObject("/dbmy/p/"+filename, path)
-			if err != nil {
-				fmt.Println(err)
-			}
+			//err = c.PutObject("/dbmy/p/"+filename, path)
+			//if err != nil {
+			//	fmt.Println(err)
+			//}
 
 			s += "\n![](/p/" + filename + ")\n"
 		}
@@ -275,31 +271,34 @@ func upload(c *oss.Client, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getPic(c *oss.Client, ctx *macaron.Context) {
+func getPic(w http.ResponseWriter, req *http.Request) {
 
-	filename := ctx.Params(":name")
-	fmt.Println("Name: " + filename)
+	path := req.URL.Path
+	filename := strings.TrimLeft(path, "/p/")
 
-	if _, err := os.Stat("./cache/" + filename); err != nil {
-		bytes, err := c.GetObject("/dbmy/p/"+filename, -1, -1)
-
-		err = ioutil.WriteFile("./cache/"+filename, bytes, 0644)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}
-
-	file, err := os.Open("./cache/" + filename) // For read access.
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer file.Close()
-
-	bytes, err := ioutil.ReadAll(file)
+	//if _, err := os.Stat("./cache/" + filename); err != nil {
+	bytes, err := c.GetObject("/dbmy/p/"+filename, -1, -1)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	//.Header().Add("Content-Disposition", "filename="+filename)
-	ctx.Resp.Write(bytes)
+	//err = ioutil.WriteFile("./cache/"+filename, bytes, 0644)
+	//if err != nil {
+	//	fmt.Println(err)
+	//}
+	//}
+
+	//file, err := os.Open("./cache/" + filename) // For read access.
+	//if err != nil {
+	//	fmt.Println(err)
+	//}
+	//defer file.Close()
+
+	//bytes, err := ioutil.ReadAll(file)
+	//if err != nil {
+	//	fmt.Println(err)
+	//}
+
+	w.Header().Add("Content-Disposition", "filename="+filename)
+	w.Write(bytes)
 }

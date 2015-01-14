@@ -23,7 +23,7 @@ func Sha1sum(s string) string {
 	return fmt.Sprintf("%x", sha1.Sum(data))
 }
 
-func JsonDecode(reader io.Reader, v interface{}) []byte {
+func JsonDecode(reader io.Reader, v interface{}) {
 	bytes, err := ioutil.ReadAll(reader)
 	if err != nil {
 		fmt.Println(err)
@@ -32,13 +32,12 @@ func JsonDecode(reader io.Reader, v interface{}) []byte {
 	if err != nil {
 		fmt.Println("json err:", err)
 	}
-	return bytes
 }
 
-func JsonEncode(v interface{}) string {
+func JsonEncode(v interface{}) []byte {
 	bytes, err := json.Marshal(v)
 	if err != nil {
 		fmt.Println("json err:", err)
 	}
-	return string(bytes)
+	return bytes
 }
