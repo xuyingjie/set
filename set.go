@@ -70,7 +70,7 @@ func main() {
 	http.HandleFunc("/upload", upload)
 	http.HandleFunc("/p/", getPic)
 
-	http.Handle("/", http.FileServer(http.Dir("pub")))
+	// http.Handle("/", http.FileServer(http.Dir("pub")))
 
 	fmt.Println(`http.ListenAndServe(":8080", nil)`)
 	http.ListenAndServe(":8080", nil)
